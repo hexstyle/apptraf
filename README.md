@@ -91,7 +91,7 @@ Data lives at `~/Library/Application Support/AppTraf/data.sqlite`.
 
 ## Honest limitations
 
-- **Process names are truncated.** `nettop` cuts names to 15 characters, so `Google Chrome Helper` shows up as `Google Chrome H` and Chrome's many helper processes aggregate under that one bucket. (Often what you actually want.)
+- **Helpers roll up under the parent app.** Full process paths are resolved via `proc_pidpath`, then aggregated by the outermost `.app` bundle. So all five `Google Chrome Helper` processes show up under one row, `Google Chrome`. Usually what you want.
 - **User-level visibility.** apptraf runs as a per-user LaunchAgent — no root, no privileged install. It sees all your apps and most background services. Some root daemons may be partially missing. This is intentional.
 - **Per-minute resolution.** A process that lives less than ~60 seconds may be missed entirely. For shells, build scripts and other ephemeral tools this is usually fine; for studying short-lived spikes it isn't.
 

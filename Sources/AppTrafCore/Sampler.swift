@@ -30,6 +30,7 @@ public enum Sampler {
         guard let text = String(data: data, encoding: .utf8) else { return [] }
 
         var result: [ProcEntry] = []
+        var seenPIDs = Set<Int32>()
         for raw in text.split(separator: "\n") {
             let cols = raw.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
             guard cols.count >= 3 else { continue }
@@ -38,13 +39,16 @@ public enum Sampler {
             if head == "time" { continue }
 
             guard let dot = head.lastIndex(of: ".") else { continue }
-            let name = String(head[..<dot]).trimmingCharacters(in: .whitespaces)
+            let fallbackName = String(head[..<dot]).trimmingCharacters(in: .whitespaces)
             let pidStr = String(head[head.index(after: dot)...])
-            guard let pid = Int32(pidStr), !name.isEmpty else { continue }
+            guard let pid = Int32(pidStr), !fallbackName.isEmpty else { continue }
             guard let bin = UInt64(cols[1]), let bout = UInt64(cols[2]) else { continue }
 
-            result.append(ProcEntry(pid: pid, app: name, bytesIn: bin, bytesOut: bout))
+            let resolved = ProcInfo.appName(forPID: pid) ?? fallbackName
+            seenPIDs.insert(pid)
+            result.append(ProcEntry(pid: pid, app: resolved, bytesIn: bin, bytesOut: bout))
         }
+        ProcInfo.prune(keeping: seenPIDs)
         return result
     }
 }
