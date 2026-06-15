@@ -16,9 +16,16 @@ Data lives at `~/Library/Application Support/AppTraf/data.sqlite`.
 
 ```sh
 brew tap hexstyle/apptraf https://github.com/hexstyle/apptraf
-brew install apptraf
-brew services start apptraf
+brew install hexstyle/apptraf/apptraf
+brew services start hexstyle/apptraf/apptraf
 ```
+
+Homebrew 6+ requires trusting third-party taps. If `brew install` rejects
+the tap, run `brew trust --formula hexstyle/apptraf/apptraf` once, or set
+`HOMEBREW_NO_REQUIRE_TAP_TRUST=1`.
+
+Requires Xcode Command Line Tools (provides `swift`). If they're missing
+the installer will prompt you to install them.
 
 Open the UI:
 

@@ -4,11 +4,9 @@ class Apptraf < Formula
   url "https://github.com/hexstyle/apptraf.git",
       tag:      "v0.1.0",
       revision: "b0638c9dace725c4dd07e2ec7ee98d72f3b7a1f8"
-  version "0.1.0"
   license "MIT"
   head "https://github.com/hexstyle/apptraf.git", branch: "main"
 
-  depends_on xcode: ["14.0"] => :build
   depends_on :macos
 
   def install
@@ -26,7 +24,7 @@ class Apptraf < Formula
   end
 
   test do
-    assert_predicate bin/"apptrafd", :exist?
-    assert_predicate bin/"apptraf",  :exist?
+    assert_path_exists bin/"apptrafd"
+    assert_path_exists bin/"apptraf"
   end
 end
