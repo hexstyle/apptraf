@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.png" alt="AppTraf icon" width="160" height="160">
+</p>
+
 # apptraf
 
 > **Where is your bandwidth going?**
