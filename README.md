@@ -32,13 +32,15 @@ brew install hexstyle/apptraf/apptraf
 brew services start hexstyle/apptraf/apptraf
 ```
 
-Open the UI any time:
+`AppTraf.app` is symlinked into `/Applications` automatically, so it shows up in Spotlight, Launchpad, Finder and the Dock straight after install. Open it the usual way, or from any terminal:
 
 ```sh
 apptraf
 ```
 
 The daemon needs the first ~2 minutes of uptime to establish per-process baselines; after that, every minute of traffic shows up in the current-hour bucket.
+
+> If `/Applications` isn't writable on your machine, the symlink step is skipped — `brew info apptraf` prints a one-liner you can run manually.
 
 > Homebrew 6+ asks you to trust new taps. If the install errors out, run
 > `brew trust --formula hexstyle/apptraf/apptraf` once.
@@ -106,6 +108,7 @@ brew services restart hexstyle/apptraf/apptraf
 brew services stop hexstyle/apptraf/apptraf
 brew uninstall apptraf
 brew untap hexstyle/apptraf
+rm -f /Applications/AppTraf.app
 rm -rf ~/Library/Application\ Support/AppTraf
 ```
 
@@ -114,10 +117,12 @@ rm -rf ~/Library/Application\ Support/AppTraf
 ```sh
 git clone https://github.com/hexstyle/apptraf
 cd apptraf
-swift build -c release
-.build/release/apptrafd   # foreground run, Ctrl-C to stop
-.build/release/apptraf    # opens the UI
+scripts/build-app.sh 0.1.2-dev    # produces .build/release/AppTraf.app
+.build/release/apptrafd            # foreground daemon, Ctrl-C to stop
+open .build/release/AppTraf.app    # opens the UI
 ```
+
+Regenerate the icon from source: `swift scripts/make-icon.swift && iconutil -c icns Resources/AppTraf.iconset -o Resources/AppTraf.icns`.
 
 Requires Xcode Command Line Tools.
 
