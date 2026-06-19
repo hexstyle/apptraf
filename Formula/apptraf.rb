@@ -2,14 +2,12 @@ class Apptraf < Formula
   desc "Lightweight per-app network traffic tracker for macOS"
   homepage "https://github.com/hexstyle/apptraf"
   url "https://github.com/hexstyle/apptraf.git",
-      tag:      "v0.1.2",
-      revision: "9ff47fecd6cffdcd4ee9cf9146c38b655c3e0ea4"
+      tag:      "v0.1.3",
+      revision: "REPLACE_WITH_TAG_REVISION"
   license "MIT"
   head "https://github.com/hexstyle/apptraf.git", branch: "main"
 
   depends_on :macos
-
-  APPLICATIONS_DIR = Pathname.new("/Applications").freeze
 
   def install
     system "scripts/build-app.sh", version.to_s
@@ -21,40 +19,57 @@ class Apptraf < Formula
       exec /usr/bin/open -a "#{opt_prefix}/AppTraf.app" "$@"
     SH
     (bin/"apptraf").chmod 0755
-  end
 
-  def post_install
-    source = opt_prefix/"AppTraf.app"
-    target = APPLICATIONS_DIR/"AppTraf.app"
+    (bin/"apptraf-install-app").write <<~SH
+      #!/bin/sh
+      # Copy AppTraf.app into /Applications so Spotlight indexes it.
+      # Run once after `brew install`, and again after each `brew upgrade`.
+      set -e
 
-    return if !APPLICATIONS_DIR.directory? || !APPLICATIONS_DIR.writable?
-    return if target.exist? && !target.symlink?
+      SOURCE="#{opt_prefix}/AppTraf.app"
+      TARGET="/Applications/AppTraf.app"
+      LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+      BUNDLE_ID="com.hexstyle.apptraf"
 
-    target.delete if target.symlink?
-    target.make_symlink(source)
-  rescue Errno::EACCES, Errno::EPERM
-    # /Applications wasn't writable — fall through to caveats.
+      if [ ! -d "$SOURCE" ]; then
+          echo "error: $SOURCE not found — is apptraf installed via brew?" >&2
+          exit 1
+      fi
+
+      if [ ! -d /Applications ] || [ ! -w /Applications ]; then
+          echo "error: /Applications is not writable" >&2
+          exit 1
+      fi
+
+      if [ -e "$TARGET" ] && [ ! -L "$TARGET" ]; then
+          existing_id=$(/usr/bin/defaults read "$TARGET/Contents/Info" CFBundleIdentifier 2>/dev/null || true)
+          if [ "$existing_id" != "$BUNDLE_ID" ]; then
+              echo "error: $TARGET exists and isn't AppTraf — refusing to clobber" >&2
+              exit 1
+          fi
+      fi
+
+      rm -rf "$TARGET"
+      cp -R "$SOURCE" "$TARGET"
+      [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$TARGET" >/dev/null 2>&1 || true
+
+      echo "Installed: $TARGET"
+    SH
+    (bin/"apptraf-install-app").chmod 0755
   end
 
   def caveats
-    target = APPLICATIONS_DIR/"AppTraf.app"
-    if target.symlink? && target.readlink == opt_prefix/"AppTraf.app"
-      <<~EOS
-        AppTraf.app is linked into /Applications and available via
-        Spotlight, Launchpad and Finder. Launch from terminal: apptraf
-      EOS
-    else
-      <<~EOS
-        The GUI bundle is at:
-          #{opt_prefix}/AppTraf.app
+    <<~EOS
+      The GUI bundle is at:
+        #{opt_prefix}/AppTraf.app
 
-        /Applications wasn't writable, so it wasn't symlinked automatically.
-        To make it appear in Spotlight, Launchpad and Finder:
-          ln -sfn "#{opt_prefix}/AppTraf.app" /Applications/AppTraf.app
+      To make AppTraf appear in Spotlight, Launchpad and Finder, run once after
+      install (and after every `brew upgrade`):
+        apptraf-install-app
 
-        Launch from terminal: apptraf
-      EOS
-    end
+      Or just open the UI from any terminal:
+        apptraf
+    EOS
   end
 
   service do
@@ -68,6 +83,7 @@ class Apptraf < Formula
   test do
     assert_path_exists bin/"apptrafd"
     assert_path_exists bin/"apptraf"
+    assert_path_exists bin/"apptraf-install-app"
     assert_path_exists prefix/"AppTraf.app/Contents/MacOS/AppTraf"
     assert_path_exists prefix/"AppTraf.app/Contents/Info.plist"
     assert_path_exists prefix/"AppTraf.app/Contents/Resources/AppTraf.icns"

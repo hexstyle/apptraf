@@ -32,7 +32,13 @@ brew install hexstyle/apptraf/apptraf
 brew services start hexstyle/apptraf/apptraf
 ```
 
-`AppTraf.app` is symlinked into `/Applications` automatically, so it shows up in Spotlight, Launchpad, Finder and the Dock straight after install. Open it the usual way, or from any terminal:
+After install, drop `AppTraf.app` into `/Applications` once with the bundled helper (re-run it after every `brew upgrade` to keep the copy in sync):
+
+```sh
+apptraf-install-app
+```
+
+That makes AppTraf show up in Spotlight, Launchpad, Finder and the Dock. Or just open the UI from any terminal:
 
 ```sh
 apptraf
@@ -40,7 +46,7 @@ apptraf
 
 The daemon needs the first ~2 minutes of uptime to establish per-process baselines; after that, every minute of traffic shows up in the current-hour bucket.
 
-> If `/Applications` isn't writable on your machine, the symlink step is skipped — `brew info apptraf` prints a one-liner you can run manually.
+> Why a copy and not a symlink? Spotlight reliably indexes only bundles physically present under `/Applications`; symlinks into `/opt/homebrew/...` aren't indexed. The helper does a `cp -R` + `lsregister -f` and refuses to clobber a non-AppTraf bundle at the target path.
 
 > Homebrew 6+ asks you to trust new taps. If the install errors out, run
 > `brew trust --formula hexstyle/apptraf/apptraf` once.
@@ -102,13 +108,14 @@ Data lives at `~/Library/Application Support/AppTraf/data.sqlite`.
 ```sh
 # update
 brew update && brew upgrade apptraf
+apptraf-install-app                       # refresh the /Applications copy
 brew services restart hexstyle/apptraf/apptraf
 
 # uninstall
 brew services stop hexstyle/apptraf/apptraf
 brew uninstall apptraf
 brew untap hexstyle/apptraf
-rm -f /Applications/AppTraf.app
+rm -rf /Applications/AppTraf.app
 rm -rf ~/Library/Application\ Support/AppTraf
 ```
 
