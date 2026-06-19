@@ -3,6 +3,7 @@ import AppTrafCore
 
 final class BarChartView: NSView {
     var entries: [AggRow] = []
+    var metric: SortMetric = .total
 
     override var isFlipped: Bool { true }
 
@@ -10,19 +11,26 @@ final class BarChartView: NSView {
         NSColor.windowBackgroundColor.setFill()
         bounds.fill()
 
+        let captionAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        let caption = NSAttributedString(string: "Top 10 by \(metric.label)", attributes: captionAttrs)
+        caption.draw(at: NSPoint(x: 16, y: 4))
+
         guard !entries.isEmpty else {
             drawPlaceholder("No data yet")
             return
         }
 
-        let totals = entries.map { $0.bytesIn + $0.bytesOut }
-        guard let mx = totals.max(), mx > 0 else {
+        let values = entries.map { metric.value(of: $0) }
+        guard let mx = values.max(), mx > 0 else {
             drawPlaceholder("No traffic recorded for the period")
             return
         }
 
         let padX: CGFloat = 16
-        let padTop: CGFloat = 18
+        let padTop: CGFloat = 26
         let labelArea: CGFloat = 32
         let chartTop = padTop
         let chartBottom = bounds.height - labelArea
@@ -46,8 +54,8 @@ final class BarChartView: NSView {
         ]
 
         for (i, e) in entries.enumerated() {
-            let total = CGFloat(e.bytesIn + e.bytesOut)
-            let h = chartHeight * (total / CGFloat(mx))
+            let v = CGFloat(metric.value(of: e))
+            let h = chartHeight * (v / CGFloat(mx))
             let x = chartLeft + CGFloat(i) * slot + leadGap
             let y = chartBottom - h
             let rect = NSRect(x: x, y: y, width: barWidth, height: max(2, h))
@@ -64,7 +72,7 @@ final class BarChartView: NSView {
                 y: chartBottom + 6
             ))
 
-            let valueStr = NSAttributedString(string: humanBytes(UInt64(total)), attributes: valueAttrs)
+            let valueStr = NSAttributedString(string: humanBytes(UInt64(v)), attributes: valueAttrs)
             let vsz = valueStr.size()
             let valueY = max(chartTop, y - vsz.height - 2)
             valueStr.draw(at: NSPoint(

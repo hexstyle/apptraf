@@ -3,6 +3,7 @@ import AppTrafCore
 
 let intervalSec: TimeInterval = 60
 let cleanupEverySec: Int64 = 600
+let emptySampleStreakLimit = 5
 
 func logLine(_ s: String) {
     let ts = ISO8601DateFormatter().string(from: Date())
@@ -29,12 +30,24 @@ do {
 }
 
 var lastCleanup: Int64 = 0
+var emptyStreak = 0
 
 while true {
     let now = Int64(Date().timeIntervalSince1970)
     do {
         let entries = try Sampler.sample()
         try db.recordSample(entries, at: now)
+
+        if entries.isEmpty {
+            emptyStreak += 1
+            if emptyStreak >= emptySampleStreakLimit {
+                logLine("got \(emptyStreak) consecutive empty samples — exiting for launchd restart")
+                exit(1)
+            }
+        } else {
+            emptyStreak = 0
+        }
+
         if now - lastCleanup > cleanupEverySec {
             try db.cleanup(now: now)
             lastCleanup = now

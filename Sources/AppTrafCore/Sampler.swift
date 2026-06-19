@@ -15,18 +15,36 @@ public struct ProcEntry: Sendable {
 }
 
 public enum Sampler {
+    private static let watchdogSeconds: TimeInterval = 10
+
     public static func sample() throws -> [ProcEntry] {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
         task.arguments = ["-P", "-L", "1", "-J", "bytes_in,bytes_out", "-x"]
-        let out = Pipe()
-        let err = Pipe()
-        task.standardOutput = out
-        task.standardError = err
-        try task.run()
-        task.waitUntilExit()
 
-        let data = out.fileHandleForReading.readDataToEndOfFile()
+        let outPipe = Pipe()
+        task.standardOutput = outPipe
+        task.standardError = FileHandle.nullDevice
+        let outHandle = outPipe.fileHandleForReading
+
+        try task.run()
+
+        let watchdog = DispatchWorkItem { [weak task] in
+            guard let t = task, t.isRunning else { return }
+            t.terminate()
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + watchdogSeconds, execute: watchdog)
+
+        let data = outHandle.readDataToEndOfFile()
+        task.waitUntilExit()
+        watchdog.cancel()
+        try? outHandle.close()
+
+        guard task.terminationStatus == 0 else {
+            throw NSError(domain: "AppTraf.Sampler", code: Int(task.terminationStatus),
+                          userInfo: [NSLocalizedDescriptionKey: "nettop exited with status \(task.terminationStatus)"])
+        }
+
         guard let text = String(data: data, encoding: .utf8) else { return [] }
 
         var result: [ProcEntry] = []

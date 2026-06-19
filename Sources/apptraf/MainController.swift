@@ -23,6 +23,40 @@ enum Period: Int, CaseIterable {
     }
 }
 
+enum SortMetric: String {
+    case app, bytesIn, bytesOut, total
+
+    static func from(_ key: String?) -> SortMetric {
+        switch key {
+        case "app":   return .app
+        case "in":    return .bytesIn
+        case "out":   return .bytesOut
+        case "total": return .total
+        default:      return .total
+        }
+    }
+
+    func value(of row: AggRow) -> UInt64 {
+        switch self {
+        case .app:      return 0
+        case .bytesIn:  return row.bytesIn
+        case .bytesOut: return row.bytesOut
+        case .total:    return row.bytesIn + row.bytesOut
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .app:      return "Application"
+        case .bytesIn:  return "Download"
+        case .bytesOut: return "Upload"
+        case .total:    return "Total"
+        }
+    }
+
+    var chartFallback: SortMetric { self == .app ? .total : self }
+}
+
 final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     let view: NSView
     private let periodPopup = NSPopUpButton()
@@ -141,6 +175,7 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
             c.title = title
             c.width = width
             c.minWidth = 80
+            c.sortDescriptorPrototype = NSSortDescriptor(key: id, ascending: id == "app")
             tableView.addTableColumn(c)
         }
         tableView.dataSource = self
@@ -149,6 +184,8 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.gridStyleMask = []
         tableView.style = .inset
+
+        tableView.sortDescriptors = [NSSortDescriptor(key: "total", ascending: false)]
     }
 
     @objc private func periodChanged(_ sender: NSPopUpButton) {
@@ -171,9 +208,9 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
         }
         let total = data.reduce(UInt64(0)) { $0 + $1.bytesIn + $1.bytesOut }
         totalLabel.stringValue = "Total: \(humanBytes(total))"
-        chart.entries = Array(data.prefix(10))
-        chart.needsDisplay = true
-        tableView.reloadData()
+
+        applySortAndRefresh()
+
         if data.isEmpty {
             statusLabel.stringValue = "No data yet — daemon needs ~2 minutes after first start to build a baseline."
         } else {
@@ -182,6 +219,34 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
             df.timeStyle = .medium
             statusLabel.stringValue = "\(data.count) apps · updated \(df.string(from: Date()))"
         }
+    }
+
+    private func applySortAndRefresh() {
+        let descriptor = tableView.sortDescriptors.first
+        let metric = SortMetric.from(descriptor?.key)
+        let ascending = descriptor?.ascending ?? false
+
+        switch metric {
+        case .app:
+            data.sort {
+                let cmp = $0.app.localizedCaseInsensitiveCompare($1.app)
+                return ascending ? cmp == .orderedAscending : cmp == .orderedDescending
+            }
+        case .bytesIn, .bytesOut, .total:
+            data.sort {
+                let a = metric.value(of: $0)
+                let b = metric.value(of: $1)
+                return ascending ? a < b : a > b
+            }
+        }
+
+        let chartMetric = metric.chartFallback
+        let topByMetric = data.sorted { chartMetric.value(of: $0) > chartMetric.value(of: $1) }
+        chart.metric = chartMetric
+        chart.entries = Array(topByMetric.prefix(10))
+        chart.needsDisplay = true
+
+        tableView.reloadData()
     }
 
     // MARK: - NSTableViewDataSource / Delegate
@@ -207,5 +272,9 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
             cell.stringValue = ""
         }
         return cell
+    }
+
+    func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
+        applySortAndRefresh()
     }
 }
