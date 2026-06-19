@@ -2,8 +2,8 @@ class Apptraf < Formula
   desc "Lightweight per-app network traffic tracker for macOS"
   homepage "https://github.com/hexstyle/apptraf"
   url "https://github.com/hexstyle/apptraf.git",
-      tag:      "v0.1.3",
-      revision: "165c4a436d2610adff7559fb603b89c553f93054"
+      tag:      "v0.1.4",
+      revision: "REPLACE_WITH_TAG_REVISION"
   license "MIT"
   head "https://github.com/hexstyle/apptraf.git", branch: "main"
 
@@ -52,6 +52,7 @@ class Apptraf < Formula
       rm -rf "$TARGET"
       cp -R "$SOURCE" "$TARGET"
       [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$TARGET" >/dev/null 2>&1 || true
+      /usr/bin/mdimport "$TARGET" >/dev/null 2>&1 || true
 
       echo "Installed: $TARGET"
     SH
