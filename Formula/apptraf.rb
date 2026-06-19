@@ -3,7 +3,7 @@ class Apptraf < Formula
   homepage "https://github.com/hexstyle/apptraf"
   url "https://github.com/hexstyle/apptraf.git",
       tag:      "v0.1.4",
-      revision: "REPLACE_WITH_TAG_REVISION"
+      revision: "dd96a5568158e645b5323ec02e1d0fbfc8453d2f"
   license "MIT"
   head "https://github.com/hexstyle/apptraf.git", branch: "main"
 
