@@ -57,15 +57,21 @@ enum SortMetric: String {
     var chartFallback: SortMetric { self == .app ? .total : self }
 }
 
+enum ViewMode: Int { case topApps, hourly }
+
 final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     let view: NSView
     private let periodPopup = NSPopUpButton()
+    private let viewModeControl = NSSegmentedControl()
     private let totalLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
-    private let chart = BarChartView()
+    private let topAppsChart = BarChartView()
+    private let hourlyChart = HourlyChartView()
     private let tableView = NSTableView()
     private var data: [AggRow] = []
     private var period: Period = .h24
+    private var viewMode: ViewMode = .topApps
+    private var hourSelection: (from: Int64, to: Int64)?
     private var refreshTimer: Timer?
     private var db: DB?
 
@@ -87,6 +93,18 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
 
         periodPopup.target = self
         periodPopup.action = #selector(periodChanged(_:))
+        viewModeControl.target = self
+        viewModeControl.action = #selector(viewModeChanged(_:))
+
+        hourlyChart.onSelectionChange = { [weak self] sel in
+            guard let self = self else { return }
+            if let sel = sel {
+                self.hourSelection = sel
+            } else {
+                self.hourSelection = nil
+            }
+            self.reload()
+        }
 
         reload()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
@@ -106,15 +124,24 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
         periodPopup.selectItem(at: Period.h24.rawValue)
         periodPopup.translatesAutoresizingMaskIntoConstraints = false
 
+        viewModeControl.segmentCount = 2
+        viewModeControl.setLabel("Top apps", forSegment: 0)
+        viewModeControl.setLabel("Hourly", forSegment: 1)
+        viewModeControl.selectedSegment = 0
+        viewModeControl.translatesAutoresizingMaskIntoConstraints = false
+
         totalLabel.font = .systemFont(ofSize: 12, weight: .medium)
         totalLabel.alignment = .right
         totalLabel.translatesAutoresizingMaskIntoConstraints = false
 
         toolbar.addSubview(periodLabel)
         toolbar.addSubview(periodPopup)
+        toolbar.addSubview(viewModeControl)
         toolbar.addSubview(totalLabel)
 
-        chart.translatesAutoresizingMaskIntoConstraints = false
+        topAppsChart.translatesAutoresizingMaskIntoConstraints = false
+        hourlyChart.translatesAutoresizingMaskIntoConstraints = false
+        hourlyChart.isHidden = true
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -127,7 +154,8 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(toolbar)
-        view.addSubview(chart)
+        view.addSubview(topAppsChart)
+        view.addSubview(hourlyChart)
         view.addSubview(scrollView)
         view.addSubview(statusLabel)
 
@@ -144,15 +172,23 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
             periodPopup.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
             periodPopup.widthAnchor.constraint(equalToConstant: 180),
 
+            viewModeControl.leadingAnchor.constraint(equalTo: periodPopup.trailingAnchor, constant: 12),
+            viewModeControl.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+
             totalLabel.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -14),
             totalLabel.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
 
-            chart.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
-            chart.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            chart.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            chart.heightAnchor.constraint(equalToConstant: 240),
+            topAppsChart.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            topAppsChart.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            topAppsChart.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            topAppsChart.heightAnchor.constraint(equalToConstant: 240),
 
-            scrollView.topAnchor.constraint(equalTo: chart.bottomAnchor, constant: 4),
+            hourlyChart.topAnchor.constraint(equalTo: topAppsChart.topAnchor),
+            hourlyChart.leadingAnchor.constraint(equalTo: topAppsChart.leadingAnchor),
+            hourlyChart.trailingAnchor.constraint(equalTo: topAppsChart.trailingAnchor),
+            hourlyChart.bottomAnchor.constraint(equalTo: topAppsChart.bottomAnchor),
+
+            scrollView.topAnchor.constraint(equalTo: topAppsChart.bottomAnchor, constant: 4),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: statusLabel.topAnchor, constant: -4),
@@ -191,17 +227,39 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
     @objc private func periodChanged(_ sender: NSPopUpButton) {
         if let p = Period(rawValue: sender.indexOfSelectedItem) {
             period = p
+            hourSelection = nil
             reload()
         }
+    }
+
+    @objc private func viewModeChanged(_ sender: NSSegmentedControl) {
+        guard let mode = ViewMode(rawValue: sender.selectedSegment) else { return }
+        viewMode = mode
+        topAppsChart.isHidden = (mode != .topApps)
+        hourlyChart.isHidden = (mode != .hourly)
+        if mode == .topApps {
+            hourSelection = nil
+        }
+        reload()
     }
 
     private func reload() {
         guard let db = db else { return }
         let now = Int64(Date().timeIntervalSince1970)
         let curHour = (now / 3600) * 3600
-        let from = curHour - Int64(period.hours - 1) * 3600
+        let periodFrom = curHour - Int64(period.hours - 1) * 3600
+
+        let (tableFrom, tableTo): (Int64, Int64)
+        if let sel = hourSelection {
+            tableFrom = sel.from
+            tableTo = sel.to
+        } else {
+            tableFrom = periodFrom
+            tableTo = curHour
+        }
+
         do {
-            data = try db.aggregate(fromHour: from, toHour: curHour)
+            data = try db.aggregate(fromHour: tableFrom, toHour: tableTo)
         } catch {
             data = []
             statusLabel.stringValue = "Query error: \(error.localizedDescription)"
@@ -209,15 +267,32 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
         let total = data.reduce(UInt64(0)) { $0 + $1.bytesIn + $1.bytesOut }
         totalLabel.stringValue = "Total: \(humanBytes(total))"
 
+        if viewMode == .hourly {
+            do {
+                let buckets = try db.hourlyAggregate(fromHour: periodFrom, toHour: curHour)
+                hourlyChart.period = period
+                hourlyChart.buckets = buckets
+            } catch {
+                hourlyChart.buckets = []
+            }
+        }
+
         applySortAndRefresh()
 
         if data.isEmpty {
             statusLabel.stringValue = "No data yet — daemon needs ~2 minutes after first start to build a baseline."
         } else {
             let df = DateFormatter()
-            df.dateStyle = .short
-            df.timeStyle = .medium
-            statusLabel.stringValue = "\(data.count) apps · updated \(df.string(from: Date()))"
+            df.dateStyle = .none
+            df.timeStyle = .short
+            if let sel = hourSelection {
+                let a = df.string(from: Date(timeIntervalSince1970: TimeInterval(sel.from)))
+                let b = df.string(from: Date(timeIntervalSince1970: TimeInterval(sel.to + 3600)))
+                statusLabel.stringValue = "\(data.count) apps · interval \(a)–\(b)"
+            } else {
+                df.timeStyle = .medium
+                statusLabel.stringValue = "\(data.count) apps · updated \(df.string(from: Date()))"
+            }
         }
     }
 
@@ -242,9 +317,9 @@ final class MainController: NSObject, NSTableViewDataSource, NSTableViewDelegate
 
         let chartMetric = metric.chartFallback
         let topByMetric = data.sorted { chartMetric.value(of: $0) > chartMetric.value(of: $1) }
-        chart.metric = chartMetric
-        chart.entries = Array(topByMetric.prefix(10))
-        chart.needsDisplay = true
+        topAppsChart.metric = chartMetric
+        topAppsChart.entries = Array(topByMetric.prefix(10))
+        topAppsChart.needsDisplay = true
 
         tableView.reloadData()
     }

@@ -2,8 +2,8 @@ class Apptraf < Formula
   desc "Lightweight per-app network traffic tracker for macOS"
   homepage "https://github.com/hexstyle/apptraf"
   url "https://github.com/hexstyle/apptraf.git",
-      tag:      "v0.1.5",
-      revision: "3c1eaf45052f2a0b0cda1e578c274c0d39be55d7"
+      tag:      "v0.1.6",
+      revision: "REPLACE_WITH_TAG_REVISION"
   license "MIT"
   head "https://github.com/hexstyle/apptraf.git", branch: "main"
 

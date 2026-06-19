@@ -78,8 +78,10 @@ For comparison, mainstream firewall-style alternatives (Little Snitch, TripMode)
 ## Features
 
 - Period selector: last 1 h / 6 h / 24 h / 7 d.
+- Two chart modes (toolbar toggle):
+  - **Top apps** — bar chart of top 10 apps, rescaled to whichever column you sorted by.
+  - **Hourly** — line + area chart of per-hour consumption across the period. Drag horizontally to highlight an interval; the table below switches to "totals over selection". Click without dragging clears the selection.
 - Sortable table: click any column header (Application / Download / Upload / Total) to reorder; click again to flip direction.
-- Bar chart of top 10 apps, automatically rescaled to the column you sorted by.
 - Auto-refresh every 30 seconds while the window is open.
 - Self-healing daemon: if `nettop` starts returning empty samples (a known macOS post-sleep edge case), the daemon exits after 5 consecutive empties so launchd brings it back fresh.
 

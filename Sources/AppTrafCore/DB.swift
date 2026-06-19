@@ -12,6 +12,19 @@ public struct AggRow: Sendable {
     public let bytesOut: UInt64
 }
 
+public struct HourBucket: Sendable {
+    public let hour: Int64
+    public let bytesIn: UInt64
+    public let bytesOut: UInt64
+    public var total: UInt64 { bytesIn + bytesOut }
+
+    public init(hour: Int64, bytesIn: UInt64, bytesOut: UInt64) {
+        self.hour = hour
+        self.bytesIn = bytesIn
+        self.bytesOut = bytesOut
+    }
+}
+
 public final class DB {
     private var handle: OpaquePointer?
 
@@ -133,6 +146,37 @@ public final class DB {
         let cutState = now - Int64(stateTTLSeconds)
         try exec("DELETE FROM samples WHERE hour < \(cutHour);")
         try exec("DELETE FROM process_state WHERE updated_at < \(cutState);")
+    }
+
+    public func hourlyAggregate(fromHour: Int64, toHour: Int64) throws -> [HourBucket] {
+        var dict: [Int64: (UInt64, UInt64)] = [:]
+        var stmt: OpaquePointer?
+        let sql = """
+            SELECT hour, SUM(bytes_in), SUM(bytes_out)
+            FROM samples
+            WHERE hour >= ? AND hour <= ?
+            GROUP BY hour
+            ORDER BY hour ASC;
+        """
+        sqlite3_prepare_v2(handle, sql, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, fromHour)
+        sqlite3_bind_int64(stmt, 2, toHour)
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let h = sqlite3_column_int64(stmt, 0)
+            let bi = UInt64(bitPattern: sqlite3_column_int64(stmt, 1))
+            let bo = UInt64(bitPattern: sqlite3_column_int64(stmt, 2))
+            dict[h] = (bi, bo)
+        }
+        sqlite3_finalize(stmt)
+
+        var result: [HourBucket] = []
+        var h = fromHour
+        while h <= toHour {
+            let pair = dict[h] ?? (UInt64(0), UInt64(0))
+            result.append(HourBucket(hour: h, bytesIn: pair.0, bytesOut: pair.1))
+            h += 3600
+        }
+        return result
     }
 
     public func aggregate(fromHour: Int64, toHour: Int64) throws -> [AggRow] {
